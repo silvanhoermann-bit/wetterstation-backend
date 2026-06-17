@@ -240,6 +240,21 @@
         <i class="ti ti-loader-2" style="font-size:13px;vertical-align:-2px" aria-hidden="true"></i> Lade...
       </button>
     </div>
+
+    <div style="border-top:0.5px solid var(--border);margin-top:14px;padding-top:14px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+        <span class="chart-title"><i class="ti ti-clock" style="font-size:15px;vertical-align:-2px;margin-right:4px" aria-hidden="true"></i>Mess-Intervall</span>
+        <span id="interval-display" style="font-size:13px;color:var(--muted);">Lade...</span>
+      </div>
+      <input type="range" id="interval-slider" min="1" max="30" value="1" step="1"
+             style="width:100%;accent-color:#378ADD;"
+             oninput="onIntervalSliderInput(this.value)"
+             onchange="setInterval_(this.value)">
+      <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-top:4px;">
+        <span>1 Min</span>
+        <span>30 Min</span>
+      </div>
+    </div>
   </div>
 
   <!-- Temperaturverlauf -->
@@ -489,6 +504,11 @@
       const data = await fetchJSON('/api/settings?station=station-1');
       displayOnState = data.display_on;
       renderDisplayButton();
+
+      // Intervall-Slider mit aktuellem Wert füllen (Sekunden -> Minuten)
+      const minutes = Math.round(data.interval_sec / 60);
+      document.getElementById('interval-slider').value = minutes;
+      onIntervalSliderInput(minutes);
     } catch(e) {
       document.getElementById('display-toggle-btn').innerHTML = 'Nicht verfügbar';
     }
@@ -513,11 +533,35 @@
     btn.disabled = false;
   }
 
+  // ── Mess-Intervall-Steuerung ──────────────────────────────────────────────
+  function onIntervalSliderInput(minutes) {
+    document.getElementById('interval-display').textContent =
+      minutes + (minutes == 1 ? ' Minute' : ' Minuten');
+  }
+
+  async function setInterval_(minutes) {
+    const seconds = Math.round(minutes) * 60;
+    try {
+      const r = await fetch(API + '/api/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-API-Key': API_KEY },
+        body: JSON.stringify({ station_id: 'station-1', interval_sec: seconds })
+      });
+      const data = await r.json();
+      const realMinutes = Math.round(data.interval_sec / 60);
+      document.getElementById('interval-slider').value = realMinutes;
+      onIntervalSliderInput(realMinutes);
+    } catch(e) {
+      alert('Intervall konnte nicht gesetzt werden. Server erreichbar?');
+    }
+  }
+
   // Beim Start laden, dann alle 60 Sekunden automatisch aktualisieren
   loadAll();
   loadDisplayState();
   setInterval(loadAll, 60000);
 </script>
+
 
 </body>
 </html>
