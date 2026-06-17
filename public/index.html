@@ -285,6 +285,9 @@
 
   function fmt(dt) {
     const d = new Date(dt);
+    if (currentHours > 24) {
+      return d.toLocaleString('de-DE', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+    }
     return d.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
   }
   function fmtFull(dt) {
@@ -420,9 +423,8 @@
   }
 
   async function loadCharts(hours) {
-    const limit = hours <= 6 ? 200 : 500;
-    const rows = await fetchJSON(`/api/data?hours=${hours}&limit=${limit}`);
-    const sorted = rows.slice().reverse();
+    const rows = await fetchJSON(`/api/data/sampled?hours=${hours}&target=300`);
+    const sorted = rows; // /api/data/sampled liefert bereits aufsteigend sortiert
     const labels   = sorted.map(r => fmt(r.timestamp));
     const temps    = sorted.map(r => parseFloat(r.temperature));
     const pressures = sorted.map(r => parseFloat(r.pressure));
