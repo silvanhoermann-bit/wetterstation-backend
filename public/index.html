@@ -232,6 +232,16 @@
     </div>
   </div>
 
+  <!-- Steuerung -->
+  <div class="chart-card" style="margin-bottom:1.5rem;">
+    <div class="chart-header" style="margin-bottom:0;">
+      <span class="chart-title"><i class="ti ti-device-imac" style="font-size:15px;vertical-align:-2px;margin-right:4px" aria-hidden="true"></i>Display am ESP32</span>
+      <button class="pill" id="display-toggle-btn" onclick="toggleDisplay()" style="padding:6px 16px;">
+        <i class="ti ti-loader-2" style="font-size:13px;vertical-align:-2px" aria-hidden="true"></i> Lade...
+      </button>
+    </div>
+  </div>
+
   <!-- Temperaturverlauf -->
   <div class="chart-card">
     <div class="chart-header">
@@ -277,7 +287,9 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
 <script>
   const API = '';   // leer = gleicher Server; für externes Hosting z.B. "https://deine-domain.de"
+  const API_KEY = 'dein-geheimer-api-key-hier'; // muss mit config.h auf dem ESP32 übereinstimmen
   let currentHours = 1;
+  let displayOnState = true;
   let tempChart, comboChart;
   const isDark = matchMedia('(prefers-color-scheme: dark)').matches;
   const gridColor = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)';
@@ -462,9 +474,50 @@
     loadCharts(hours);
   }
 
+  // ── Display-Steuerung ─────────────────────────────────────────────────────
+  function renderDisplayButton() {
+    const btn = document.getElementById('display-toggle-btn');
+    if (displayOnState) {
+      btn.innerHTML = '<i class="ti ti-eye" style="font-size:13px;vertical-align:-2px" aria-hidden="true"></i> An — ausschalten';
+    } else {
+      btn.innerHTML = '<i class="ti ti-eye-off" style="font-size:13px;vertical-align:-2px" aria-hidden="true"></i> Aus — einschalten';
+    }
+  }
+
+  async function loadDisplayState() {
+    try {
+      const data = await fetchJSON('/api/settings?station=station-1');
+      displayOnState = data.display_on;
+      renderDisplayButton();
+    } catch(e) {
+      document.getElementById('display-toggle-btn').innerHTML = 'Nicht verfügbar';
+    }
+  }
+
+  async function toggleDisplay() {
+    const btn = document.getElementById('display-toggle-btn');
+    btn.disabled = true;
+    const newState = !displayOnState;
+    try {
+      const r = await fetch(API + '/api/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-API-Key': API_KEY },
+        body: JSON.stringify({ station_id: 'station-1', display_on: newState })
+      });
+      const data = await r.json();
+      displayOnState = data.display_on;
+    } catch(e) {
+      alert('Befehl konnte nicht gesendet werden. Server erreichbar?');
+    }
+    renderDisplayButton();
+    btn.disabled = false;
+  }
+
   // Beim Start laden, dann alle 60 Sekunden automatisch aktualisieren
   loadAll();
+  loadDisplayState();
   setInterval(loadAll, 60000);
 </script>
+
 </body>
 </html>
