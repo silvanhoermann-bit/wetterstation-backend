@@ -20,7 +20,7 @@ db.exec(`
     temperature REAL    NOT NULL,
     pressure    REAL    NOT NULL,
     humidity    REAL    NOT NULL,
-    timestamp   DATETIME DEFAULT (datetime('now', 'localtime'))
+    timestamp   DATETIME DEFAULT (datetime('now'))
   )
 `);
 db.exec(`CREATE INDEX IF NOT EXISTS idx_timestamp  ON messungen (timestamp DESC)`);
@@ -81,7 +81,7 @@ app.get("/api/data", (req, res) => {
   const conds  = [];
 
   if (station) { conds.push("station_id = ?"); params.push(station); }
-  if (hours)   { conds.push(`timestamp >= datetime('now','localtime','-${hours} hours')`); }
+  if (hours)   { conds.push(`timestamp >= datetime('now','-${hours} hours')`); }
   if (conds.length) sql += " WHERE " + conds.join(" AND ");
   sql += " ORDER BY timestamp DESC LIMIT ?";
   params.push(limit);
@@ -100,7 +100,7 @@ app.get("/api/data/sampled", (req, res) => {
   const target  = Math.min(parseInt(req.query.target) || 300, 1000); // gewünschte Punktanzahl
   const station = req.query.station || null;
 
-  let sql = "SELECT * FROM messungen WHERE timestamp >= datetime('now','localtime','-" + hours + " hours')";
+  let sql = "SELECT * FROM messungen WHERE timestamp >= datetime('now','-" + hours + " hours')";
   const params = [];
   if (station) { sql += " AND station_id = ?"; params.push(station); }
   sql += " ORDER BY timestamp ASC";
@@ -144,7 +144,7 @@ app.get("/api/stats", (req, res) => {
       ROUND(MIN(humidity),1)    AS hum_min,  ROUND(MAX(humidity),1)    AS hum_max,  ROUND(AVG(humidity),1)    AS hum_avg,
       COUNT(*) AS anzahl
     FROM messungen
-    WHERE timestamp >= datetime('now','localtime','-${days} days')
+    WHERE timestamp >= datetime('now','-${days} days')
   `;
   const params = [];
   if (station) { sql += " AND station_id = ?"; params.push(station); }
