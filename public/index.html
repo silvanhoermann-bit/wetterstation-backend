@@ -310,15 +310,22 @@
   const gridColor = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)';
   const tickColor = isDark ? '#9a9a96' : '#6b6b67';
 
+  // SQLite liefert "2026-06-17 16:54:41" ohne Zeitzone — das ist UTC.
+  // Wir hängen "Z" an, damit der Browser es korrekt als UTC erkennt
+  // und automatisch in die lokale Zeitzone des Nutzers umrechnet.
+  function parseUTC(dt) {
+    return new Date(dt.replace(' ', 'T') + 'Z');
+  }
+
   function fmt(dt) {
-    const d = new Date(dt);
+    const d = parseUTC(dt);
     if (currentHours > 24) {
       return d.toLocaleString('de-DE', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
     }
     return d.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
   }
   function fmtFull(dt) {
-    const d = new Date(dt);
+    const d = parseUTC(dt);
     return d.toLocaleString('de-DE', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' });
   }
 
