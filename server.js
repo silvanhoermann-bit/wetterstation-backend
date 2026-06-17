@@ -26,13 +26,16 @@ db.exec(`
 db.exec(`CREATE INDEX IF NOT EXISTS idx_timestamp  ON messungen (timestamp DESC)`);
 db.exec(`CREATE INDEX IF NOT EXISTS idx_station_id ON messungen (station_id)`);
 
-// Tabelle für Steuerbefehle (z.B. Display an/aus)
+// Tabelle für Steuerbefehle (z.B. Display an/aus, Mess-Intervall)
 db.exec(`
   CREATE TABLE IF NOT EXISTS einstellungen (
-    station_id  TEXT PRIMARY KEY,
-    display_on  INTEGER NOT NULL DEFAULT 1
+    station_id   TEXT PRIMARY KEY,
+    display_on   INTEGER NOT NULL DEFAULT 1,
+    interval_sec INTEGER NOT NULL DEFAULT 60
   )
 `);
+// Falls die Tabelle schon vor diesem Update existierte: Spalte nachträglich ergänzen
+try { db.exec(`ALTER TABLE einstellungen ADD COLUMN interval_sec INTEGER NOT NULL DEFAULT 60`); } catch (e) {}
 
 console.log("[DB] SQLite bereit");
 
@@ -168,20 +171,20 @@ app.delete("/api/data/invalid", (req, res) => {
 });
 
 // =============================================================================
-// GET /api/settings — ESP32 fragt hier ab, ob das Display an sein soll
+// GET /api/settings — ESP32 fragt hier ab: Display an? Welches Intervall?
 // =============================================================================
 app.get("/api/settings", (req, res) => {
   const station = req.query.station || "station-1";
 
   let row = db.prepare(`SELECT * FROM einstellungen WHERE station_id = ?`).get(station);
 
-  // Falls noch kein Eintrag existiert: Standard = Display an
+  // Falls noch kein Eintrag existiert: Standardwerte anlegen
   if (!row) {
-    db.prepare(`INSERT INTO einstellungen (station_id, display_on) VALUES (?, 1)`).run(station);
-    row = { station_id: station, display_on: 1 };
+    db.prepare(`INSERT INTO einstellungen (station_id, display_on, interval_sec) VALUES (?, 1, 60)`).run(station);
+    row = { station_id: station, display_on: 1, interval_sec: 60 };
   }
 
-  res.json({ display_on: !!row.display_on });
+  res.json({ display_on: !!row.display_on, interval_sec: row.interval_sec });
 });
 
 // =============================================================================
@@ -191,15 +194,25 @@ app.post("/api/settings", (req, res) => {
   if (!checkApiKey(req, res)) return;
 
   const station = req.body.station_id || "station-1";
-  const displayOn = req.body.display_on ? 1 : 0;
+
+  // Aktuelle Werte holen, damit ein nicht mitgeschickter Wert nicht überschrieben wird
+  let row = db.prepare(`SELECT * FROM einstellungen WHERE station_id = ?`).get(station)
+    || { display_on: 1, interval_sec: 60 };
+
+  const displayOn = req.body.display_on !== undefined ? (req.body.display_on ? 1 : 0) : row.display_on;
+
+  let intervalSec = req.body.interval_sec !== undefined ? parseInt(req.body.interval_sec) : row.interval_sec;
+  // Erlaubter Bereich: 1 bis 30 Minuten (60–1800 Sekunden)
+  if (isNaN(intervalSec)) intervalSec = row.interval_sec;
+  intervalSec = Math.min(Math.max(intervalSec, 60), 1800);
 
   db.prepare(`
-    INSERT INTO einstellungen (station_id, display_on) VALUES (?, ?)
-    ON CONFLICT(station_id) DO UPDATE SET display_on = ?
-  `).run(station, displayOn, displayOn);
+    INSERT INTO einstellungen (station_id, display_on, interval_sec) VALUES (?, ?, ?)
+    ON CONFLICT(station_id) DO UPDATE SET display_on = ?, interval_sec = ?
+  `).run(station, displayOn, intervalSec, displayOn, intervalSec);
 
-  console.log(`[SETTINGS] ${station} → Display ${displayOn ? "AN" : "AUS"}`);
-  res.json({ ok: true, display_on: !!displayOn });
+  console.log(`[SETTINGS] ${station} → Display ${displayOn ? "AN" : "AUS"} | Intervall ${intervalSec}s`);
+  res.json({ ok: true, display_on: !!displayOn, interval_sec: intervalSec });
 });
 
 app.listen(PORT, () => {
