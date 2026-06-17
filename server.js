@@ -61,7 +61,7 @@ app.post("/api/data", (req, res) => {
 });
 
 app.get("/api/data", (req, res) => {
-  const limit   = Math.min(parseInt(req.query.limit) || 50, 1000);
+  const limit   = Math.min(parseInt(req.query.limit) || 50, 5000);
   const hours   = parseInt(req.query.hours) || null;
   const station = req.query.station || null;
 
@@ -77,6 +77,41 @@ app.get("/api/data", (req, res) => {
 
   const rows = db.prepare(sql).all(...params);
   res.json(rows);
+});
+
+// =============================================================================
+// GET /api/data/sampled — Wie /api/data, aber dünnt lange Zeiträume aus,
+// damit z.B. 7 Tage an Daten nicht 10.000 Punkte zurückgeben, sondern
+// eine handhabbare, gleichmäßig verteilte Auswahl (max ~target Punkte).
+// =============================================================================
+app.get("/api/data/sampled", (req, res) => {
+  const hours   = parseInt(req.query.hours) || 24;
+  const target  = Math.min(parseInt(req.query.target) || 300, 1000); // gewünschte Punktanzahl
+  const station = req.query.station || null;
+
+  let sql = "SELECT * FROM messungen WHERE timestamp >= datetime('now','localtime','-" + hours + " hours')";
+  const params = [];
+  if (station) { sql += " AND station_id = ?"; params.push(station); }
+  sql += " ORDER BY timestamp ASC";
+
+  const all = db.prepare(sql).all(...params);
+
+  if (all.length <= target) {
+    return res.json(all);
+  }
+
+  // Gleichmäßig verteilte Stichprobe (jeden n-ten Wert nehmen)
+  const step = all.length / target;
+  const sampled = [];
+  for (let i = 0; i < target; i++) {
+    sampled.push(all[Math.floor(i * step)]);
+  }
+  // letzten echten Wert immer mit anhängen, damit der aktuellste Punkt nicht fehlt
+  if (sampled[sampled.length - 1].id !== all[all.length - 1].id) {
+    sampled.push(all[all.length - 1]);
+  }
+
+  res.json(sampled);
 });
 
 app.get("/api/latest", (req, res) => {
