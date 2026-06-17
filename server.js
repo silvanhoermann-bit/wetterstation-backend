@@ -26,6 +26,14 @@ db.exec(`
 db.exec(`CREATE INDEX IF NOT EXISTS idx_timestamp  ON messungen (timestamp DESC)`);
 db.exec(`CREATE INDEX IF NOT EXISTS idx_station_id ON messungen (station_id)`);
 
+// Tabelle für Steuerbefehle (z.B. Display an/aus)
+db.exec(`
+  CREATE TABLE IF NOT EXISTS einstellungen (
+    station_id  TEXT PRIMARY KEY,
+    display_on  INTEGER NOT NULL DEFAULT 1
+  )
+`);
+
 console.log("[DB] SQLite bereit");
 
 function checkApiKey(req, res) {
@@ -157,6 +165,41 @@ app.delete("/api/data/invalid", (req, res) => {
 
   console.log(`[DELETE] ${result.changes} fehlerhafte Einträge gelöscht`);
   res.json({ ok: true, deleted: result.changes });
+});
+
+// =============================================================================
+// GET /api/settings — ESP32 fragt hier ab, ob das Display an sein soll
+// =============================================================================
+app.get("/api/settings", (req, res) => {
+  const station = req.query.station || "station-1";
+
+  let row = db.prepare(`SELECT * FROM einstellungen WHERE station_id = ?`).get(station);
+
+  // Falls noch kein Eintrag existiert: Standard = Display an
+  if (!row) {
+    db.prepare(`INSERT INTO einstellungen (station_id, display_on) VALUES (?, 1)`).run(station);
+    row = { station_id: station, display_on: 1 };
+  }
+
+  res.json({ display_on: !!row.display_on });
+});
+
+// =============================================================================
+// POST /api/settings — Website setzt hier den gewünschten Zustand
+// =============================================================================
+app.post("/api/settings", (req, res) => {
+  if (!checkApiKey(req, res)) return;
+
+  const station = req.body.station_id || "station-1";
+  const displayOn = req.body.display_on ? 1 : 0;
+
+  db.prepare(`
+    INSERT INTO einstellungen (station_id, display_on) VALUES (?, ?)
+    ON CONFLICT(station_id) DO UPDATE SET display_on = ?
+  `).run(station, displayOn, displayOn);
+
+  console.log(`[SETTINGS] ${station} → Display ${displayOn ? "AN" : "AUS"}`);
+  res.json({ ok: true, display_on: !!displayOn });
 });
 
 app.listen(PORT, () => {
